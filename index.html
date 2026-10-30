@@ -63,7 +63,6 @@
         .data-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .data-row { display: flex; gap: 10px; align-items: flex-end; }
         .data-field { flex: 1; }
-        .data-field-sm { width: 90px; flex: none; }
         
         .result-box {
             background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px 15px;
@@ -74,8 +73,6 @@
         .chksum-status { margin-top: 20px; padding: 12px; border-radius: 10px; text-align: center; font-weight: bold; font-size: 0.95rem; display: none; }
         .chksum-ok { background: rgba(40, 167, 69, 0.2); color: #28a745; border: 1px solid #28a745; display: block; }
         .chksum-err { background: rgba(220, 53, 69, 0.2); color: #dc3545; border: 1px solid #dc3545; display: block; }
-
-        .edit-toggle { display: flex; gap: 10px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -91,7 +88,7 @@
         <!-- Вкладка загрузки -->
         <div id="view-upload" class="mode-block active">
             <label for="fileInput">Загрузите дамп (ровно 160 байт)</label>
-            <input type="file" id="fileInput" accept=".bin">
+            <input type="file" id="fileInput" accept=".bin,.BIN">
             <div style="font-size: 0.8rem; opacity: 0.6; margin-top: 10px; text-align: center;">
                 Поддерживается формат IMMO 4 / 4.5
             </div>
@@ -129,9 +126,9 @@
             <div id="edit-mode" style="display: none;">
                 <div class="data-field"><label>VIN</label><input type="text" id="in-vin" maxlength="17"></div>
                 <div class="data-field"><label>Id Dash</label><input type="text" id="in-iddash" maxlength="14"></div>
-                <div class="data-field"><label>CS (Hex)</label><input type="text" id="in-cs" placeholder="32 9E AB F8 65 3D 57..."></div>
+                <div class="data-field"><label>CS (Hex, без пробелов)</label><input type="text" id="in-cs" placeholder="329EABF8653D5718249ACA30"></div>
                 <div class="data-field"><label>PIN (DEC)</label><input type="number" id="in-pin"></div>
-                <div class="data-field"><label>MAC (Hex)</label><input type="text" id="in-mac"></div>
+                <div class="data-field"><label>MAC (Hex, без пробелов)</label><input type="text" id="in-mac"></div>
                 
                 <div class="data-row">
                     <div class="data-field" style="flex: 3;"><label>Status (Hex)</label><input type="text" id="in-status"></div>
@@ -139,20 +136,8 @@
                 </div>
 
                 <div class="data-field"><label>Config (Hex)</label><input type="text" id="in-config"></div>
-                <div class="data-field"><label>Key 1 (Hex)</label><input type="text" id="in-key1"></div>
-                <div class="data-field"><label>Key 2 (Hex)</label><input type="text" id="in-key2"></div>
-                
-                <div class="data-field">
-                    <label>Type</label>
-                    <select id="in-type">
-                        <option value="01">01 - VW</option>
-                        <option value="02">02 - VW Special</option>
-                        <option value="03">03 - Audi</option>
-                        <option value="04">04 - Audi Special</option>
-                        <option value="05">05 - Seat</option>
-                        <option value="06">06 - Skoda</option>
-                    </select>
-                </div>
+                <div class="data-field"><label>Key 1 (Hex, свап)</label><input type="text" id="in-key1"></div>
+                <div class="data-field"><label>Key 2 (Hex, свап)</label><input type="text" id="in-key2"></div>
 
                 <button class="btn-success" onclick="saveChanges()">Сохранить и пересчитать</button>
                 <button class="btn-alt" onclick="cancelEdit()">Отмена</button>
@@ -166,6 +151,7 @@
 
         let fileBytes = new Uint8Array(160);
         let hasFile = false;
+        let modifiedFile = null;
 
         const typeMap = {
             0x01: "VW", 0x02: "VW Special", 0x03: "Audi",
@@ -216,13 +202,30 @@
             return Array.from(fileBytes.slice(offset, offset + len))
                 .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
         }
-
-        function swapHex(arr) {
-            return arr.slice().reverse().map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        
+        function getHexNoSpaces(offset, len) {
+            return Array.from(fileBytes.slice(offset, offset + len))
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
         }
 
-        function hexToBytes(hexStr) {
-            return hexStr.trim().split(/\s+/).filter(Boolean).map(h => parseInt(h, 16));
+        function swapHex(offset, len) {
+            return Array.from(fileBytes.slice(offset, offset + len)).reverse()
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+        
+        function swapHexNoSpaces(offset, len) {
+            return Array.from(fileBytes.slice(offset, offset + len)).reverse()
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+        }
+
+        // Парсер строки без пробелов
+        function parseHexStr(str) {
+            let clean = str.replace(/[^0-9A-Fa-f]/g, '');
+            let bytes = [];
+            for (let i = 0; i < clean.length; i += 2) {
+                bytes.push(parseInt(clean.substring(i, i + 2), 16));
+            }
+            return bytes;
         }
 
         function calculateBlockSum(start, len, skipTrailingFF = true) {
@@ -283,7 +286,6 @@
 
         // --- Обновление UI ---
         function updateView() {
-            // Парсинг данных для отображения
             document.getElementById('out-vin').innerText = getASCII(0x1A, 17);
             document.getElementById('out-iddash').innerText = getASCII(0x62, 14);
             
@@ -298,8 +300,8 @@
             document.getElementById('out-power').innerText = getHex(0x41, 1);
             document.getElementById('out-config').innerText = getHex(0x56, 3) + ' ' + getHex(0x82, 1) + ' ' + getHex(0x5A, 2);
             
-            document.getElementById('out-key1').innerText = swapHex(Array.from(fileBytes.slice(0x72, 0x76)));
-            document.getElementById('out-key2').innerText = swapHex(Array.from(fileBytes.slice(0x76, 0x7A)));
+            document.getElementById('out-key1').innerText = swapHex(0x72, 4);
+            document.getElementById('out-key2').innerText = swapHex(0x76, 4);
             
             const typeVal = fileBytes[0x5A];
             document.getElementById('out-type').innerText = typeMap[typeVal] ? `${typeMap[typeVal]} (0x${typeVal.toString(16).padStart(2, '0').toUpperCase()})` : `Unknown (0x${typeVal.toString(16)})`;
@@ -309,20 +311,20 @@
 
         // --- Редактирование ---
         function enableEditMode() {
-            // Заполняем инпуты текущими значениями
             document.getElementById('in-vin').value = getASCII(0x1A, 17);
             document.getElementById('in-iddash').value = getASCII(0x62, 14);
-            document.getElementById('in-cs').value = getHex(0x36, 7) + ' ' + getHex(0x42, 1) + ' ' + getHex(0x44, 4);
-            document.getElementById('in-pin').value = (fileBytes[0x33] << 8) | fileBytes[0x32];
-            document.getElementById('in-mac').value = getHex(0x34, 2) + ' ' + getHex(0x4A, 2);
-            document.getElementById('in-status').value = getHex(0x3E, 4) + ' ' + getHex(0x43, 1);
-            document.getElementById('in-power').value = getHex(0x41, 1);
-            document.getElementById('in-config').value = getHex(0x56, 3) + ' ' + getHex(0x82, 1) + ' ' + getHex(0x5A, 2);
-            document.getElementById('in-key1').value = swapHex(Array.from(fileBytes.slice(0x72, 0x76)));
-            document.getElementById('in-key2').value = swapHex(Array.from(fileBytes.slice(0x76, 0x7A)));
             
-            const typeVal = fileBytes[0x5A].toString(16).padStart(2, '0');
-            document.getElementById('in-type').value = typeVal;
+            // Заполняем без пробелов
+            document.getElementById('in-cs').value = getHexNoSpaces(0x36, 7) + getHexNoSpaces(0x42, 1) + getHexNoSpaces(0x44, 4);
+            document.getElementById('in-pin').value = (fileBytes[0x33] << 8) | fileBytes[0x32];
+            document.getElementById('in-mac').value = getHexNoSpaces(0x34, 2) + getHexNoSpaces(0x4A, 2);
+            document.getElementById('in-status').value = getHexNoSpaces(0x3E, 4) + getHexNoSpaces(0x43, 1);
+            document.getElementById('in-power').value = getHexNoSpaces(0x41, 1);
+            document.getElementById('in-config').value = getHexNoSpaces(0x56, 3) + getHexNoSpaces(0x82, 1) + getHexNoSpaces(0x5A, 2);
+            
+            // Свапнутые ключи без пробелов
+            document.getElementById('in-key1').value = swapHexNoSpaces(0x72, 4);
+            document.getElementById('in-key2').value = swapHexNoSpaces(0x76, 4);
 
             document.getElementById('read-mode').style.display = 'none';
             document.getElementById('edit-mode').style.display = 'block';
@@ -343,9 +345,9 @@
                 let iddash = document.getElementById('in-iddash').value.padEnd(14, '\0').substring(0, 14);
                 for(let i=0; i<14; i++) fileBytes[0x62 + i] = iddash.charCodeAt(i);
 
-                // CS (7 + 1 + 4 байт)
-                let csBytes = hexToBytes(document.getElementById('in-cs').value);
-                if (csBytes.length !== 12) throw new Error("CS должен содержать 12 байт (7+1+4)");
+                // CS (7 + 1 + 4 = 12 байт)
+                let csBytes = parseHexStr(document.getElementById('in-cs').value);
+                if (csBytes.length !== 12) throw new Error("CS должен содержать 12 байт (24 символа)");
                 for(let i=0; i<7; i++) fileBytes[0x36 + i] = csBytes[i];
                 fileBytes[0x42] = csBytes[7];
                 for(let i=0; i<4; i++) fileBytes[0x44 + i] = csBytes[8 + i];
@@ -356,45 +358,40 @@
                 fileBytes[0x32] = pinDec & 0xFF;
                 fileBytes[0x33] = (pinDec >> 8) & 0xFF;
 
-                // MAC (2 + 2 байт)
-                let macBytes = hexToBytes(document.getElementById('in-mac').value);
-                if (macBytes.length !== 4) throw new Error("MAC должен содержать 4 байта");
+                // MAC (2 + 2 = 4 байта)
+                let macBytes = parseHexStr(document.getElementById('in-mac').value);
+                if (macBytes.length !== 4) throw new Error("MAC должен содержать 4 байта (8 символов)");
                 fileBytes[0x34] = macBytes[0]; fileBytes[0x35] = macBytes[1];
                 fileBytes[0x4A] = macBytes[2]; fileBytes[0x4B] = macBytes[3];
 
-                // Status (4 + 1 байт)
-                let statusBytes = hexToBytes(document.getElementById('in-status').value);
-                if (statusBytes.length !== 5) throw new Error("Status должен содержать 5 байт");
+                // Status (4 + 1 = 5 байт)
+                let statusBytes = parseHexStr(document.getElementById('in-status').value);
+                if (statusBytes.length !== 5) throw new Error("Status должен содержать 5 байт (10 символов)");
                 for(let i=0; i<4; i++) fileBytes[0x3E + i] = statusBytes[i];
                 fileBytes[0x43] = statusBytes[4];
 
                 // Power (1 байт)
-                let powerBytes = hexToBytes(document.getElementById('in-power').value);
-                if (powerBytes.length !== 1) throw new Error("Power должен содержать 1 байт");
+                let powerBytes = parseHexStr(document.getElementById('in-power').value);
+                if (powerBytes.length !== 1) throw new Error("Power должен содержать 1 байт (2 символа)");
                 fileBytes[0x41] = powerBytes[0];
 
-                // Config (3 + 1 + 2 байт)
-                let configBytes = hexToBytes(document.getElementById('in-config').value);
-                if (configBytes.length !== 6) throw new Error("Config должен содержать 6 байт");
+                // Config (3 + 1 + 2 = 6 байт)
+                let configBytes = parseHexStr(document.getElementById('in-config').value);
+                if (configBytes.length !== 6) throw new Error("Config должен содержать 6 байт (12 символов)");
                 for(let i=0; i<3; i++) fileBytes[0x56 + i] = configBytes[i];
                 fileBytes[0x82] = configBytes[3];
-                fileBytes[0x5A] = configBytes[4];
-                // байт 0x5B из Config
+                fileBytes[0x5A] = configBytes[4]; // Type
                 fileBytes[0x5B] = configBytes[5];
 
                 // Key 1 (Swap -> 4 байт)
-                let k1Bytes = hexToBytes(document.getElementById('in-key1').value).reverse();
-                if (k1Bytes.length !== 4) throw new Error("Key 1 должен содержать 4 байта");
+                let k1Bytes = parseHexStr(document.getElementById('in-key1').value).reverse();
+                if (k1Bytes.length !== 4) throw new Error("Key 1 должен содержать 4 байта (8 символов)");
                 for(let i=0; i<4; i++) fileBytes[0x72 + i] = k1Bytes[i];
 
                 // Key 2 (Swap -> 4 байт)
-                let k2Bytes = hexToBytes(document.getElementById('in-key2').value).reverse();
-                if (k2Bytes.length !== 4) throw new Error("Key 2 должен содержать 4 байта");
+                let k2Bytes = parseHexStr(document.getElementById('in-key2').value).reverse();
+                if (k2Bytes.length !== 4) throw new Error("Key 2 должен содержать 4 байта (8 символов)");
                 for(let i=0; i<4; i++) fileBytes[0x76 + i] = k2Bytes[i];
-
-                // Type (переопределяет 0x5A)
-                let typeVal = parseInt(document.getElementById('in-type').value, 16);
-                fileBytes[0x5A] = typeVal;
 
                 // Пересчет контрольных сумм
                 updateAllChecksums();
@@ -403,27 +400,45 @@
                 updateView();
                 cancelEdit();
                 
-                // Активация кнопки скачивания
+                // Формируем файл для скачивания
+                const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
+                const fileName = 'immo_data_modified.bin';
+                modifiedFile = new File([blob], fileName, { type: 'application/octet-stream' });
+
                 document.getElementById('btn-download').style.display = 'block';
-                tg.HapticFeedback.notificationOccurred('success');
+                try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
 
             } catch (e) {
                 alert("Ошибка: " + e.message);
-                tg.HapticFeedback.notificationOccurred('error');
+                try { tg.HapticFeedback.notificationOccurred('error'); } catch(ex) {}
             }
         }
 
-        // --- Скачивание файла ---
-        function downloadDump() {
-            const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
+        // --- Скачивание файла (Web Share API + fallback) ---
+        async function downloadDump() {
+            if (!modifiedFile) return;
+
+            try {
+                // Пытаемся использовать Web Share API (iOS)
+                if (navigator.canShare && navigator.canShare({ files: [modifiedFile] })) {
+                    await navigator.share({ files: [modifiedFile] });
+                    return; // Успешно отправлено
+                }
+            } catch (err) {
+                console.log('Share отклонён или не поддерживается, используем стандартное скачивание');
+            }
+
+            // Стандартное скачивание через <a download> (Android / PC)
+            const url = URL.createObjectURL(modifiedFile);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'immo_data_modified.bin';
+            a.download = modifiedFile.name;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
         }
     </script>
 </body>
