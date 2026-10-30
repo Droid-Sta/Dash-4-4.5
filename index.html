@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <title>IMMO 4 / 4.5 Analyzer</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(to bottom, #203a43, #2c5364);
+            min-height: 100vh; display: flex; justify-content: center; align-items: flex-start;
+            color: #fff; padding: 20px 10px;
+        }
+        .container {
+            background: rgba(255,255,255,0.08); backdrop-filter: blur(10px);
+            border-radius: 20px; padding: 20px; max-width: 500px; width: 100%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2);
+            margin-top: 10px; margin-bottom: 30px;
+        }
+        h1 { text-align: center; margin-bottom: 5px; font-size: 1.5rem; letter-spacing: 1px; }
+        .subtitle { text-align: center; opacity: 0.8; margin-bottom: 20px; font-size: 0.9rem; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab {
+            flex: 1; padding: 10px; border: none; border-radius: 10px;
+            background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-weight: 600;
+            transition: 0.3s; font-size: 0.9rem;
+        }
+        .tab.active { background: #4a90e2; box-shadow: 0 4px 12px rgba(74,144,226,0.4); }
+        
+        .mode-block { display: none; }
+        .mode-block.active { display: block; }
+
+        label { display: block; margin-top: 10px; font-size: 0.85rem; opacity: 0.9; color: #4a90e2; font-weight: 600; }
+        
+        input[type="text"], input[type="number"], input[type="file"], select {
+            width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: #fff;
+            font-size: 1rem; font-family: monospace; letter-spacing: 1px; outline: none;
+        }
+        input:focus { border-color: #4a90e2; background: rgba(0,0,0,0.4); }
+        input:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        input[type="file"]::file-selector-button {
+            background: #4a90e2; color: white; border: none; padding: 8px 12px;
+            border-radius: 6px; margin-right: 10px; cursor: pointer; font-weight: 600;
+        }
+
+        button {
+            width: 100%; padding: 14px; margin-top: 15px; border: none; border-radius: 12px;
+            background: linear-gradient(135deg, #4a90e2, #357abd); color: white;
+            font-size: 1rem; font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        button:active:not(:disabled) { transform: scale(0.98); }
+        
+        .btn-alt { background: linear-gradient(135deg, #555, #333); }
+        .btn-success { background: linear-gradient(135deg, #28a745, #1e7e34); }
+
+        .data-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+        .data-row { display: flex; gap: 10px; align-items: flex-end; }
+        .data-field { flex: 1; }
+        .data-field-sm { width: 90px; flex: none; }
+        
+        .result-box {
+            background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px 15px;
+            font-family: monospace; font-size: 1.05rem; color: #fff; word-break: break-all;
+            border-left: 3px solid #4a90e2;
+        }
+        
+        .chksum-status { margin-top: 20px; padding: 12px; border-radius: 10px; text-align: center; font-weight: bold; font-size: 0.95rem; display: none; }
+        .chksum-ok { background: rgba(40, 167, 69, 0.2); color: #28a745; border: 1px solid #28a745; display: block; }
+        .chksum-err { background: rgba(220, 53, 69, 0.2); color: #dc3545; border: 1px solid #dc3545; display: block; }
+
+        .edit-toggle { display: flex; gap: 10px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔑 IMMO 4 / 4.5</h1>
+        <div class="subtitle">Analyzer & Editor</div>
+
+        <div class="tabs">
+            <button class="tab active" id="tab-upload" onclick="switchTab('upload')">Загрузка</button>
+            <button class="tab" id="tab-data" onclick="switchTab('data')" disabled>Данные</button>
+        </div>
+
+        <!-- Вкладка загрузки -->
+        <div id="view-upload" class="mode-block active">
+            <label for="fileInput">Загрузите дамп (ровно 160 байт)</label>
+            <input type="file" id="fileInput" accept=".bin">
+            <div style="font-size: 0.8rem; opacity: 0.6; margin-top: 10px; text-align: center;">
+                Поддерживается формат IMMO 4 / 4.5
+            </div>
+        </div>
+
+        <!-- Вкладка данных -->
+        <div id="view-data" class="mode-block">
+            <!-- Режим просмотра -->
+            <div id="read-mode">
+                <div class="data-grid">
+                    <div class="data-field"><label>VIN</label><div class="result-box" id="out-vin"></div></div>
+                    <div class="data-field"><label>Id Dash</label><div class="result-box" id="out-iddash"></div></div>
+                    <div class="data-field"><label>CS</label><div class="result-box" id="out-cs"></div></div>
+                    <div class="data-field"><label>PIN (DEC)</label><div class="result-box" id="out-pin"></div></div>
+                    <div class="data-field"><label>MAC</label><div class="result-box" id="out-mac"></div></div>
+                    
+                    <div class="data-row">
+                        <div class="data-field" style="flex: 3;"><label>Status</label><div class="result-box" id="out-status"></div></div>
+                        <div class="data-field" style="flex: 1;"><label>Power</label><div class="result-box" id="out-power"></div></div>
+                    </div>
+
+                    <div class="data-field"><label>Config</label><div class="result-box" id="out-config"></div></div>
+                    <div class="data-field"><label>Key 1</label><div class="result-box" id="out-key1"></div></div>
+                    <div class="data-field"><label>Key 2</label><div class="result-box" id="out-key2"></div></div>
+                    <div class="data-field"><label>Type</label><div class="result-box" id="out-type"></div></div>
+                </div>
+
+                <div id="chksum-status" class="chksum-status"></div>
+
+                <button onclick="enableEditMode()">Поправить данные</button>
+                <button id="btn-download" class="btn-success" style="display: none;" onclick="downloadDump()">💾 Скачать дамп</button>
+            </div>
+
+            <!-- Режим редактирования -->
+            <div id="edit-mode" style="display: none;">
+                <div class="data-field"><label>VIN</label><input type="text" id="in-vin" maxlength="17"></div>
+                <div class="data-field"><label>Id Dash</label><input type="text" id="in-iddash" maxlength="14"></div>
+                <div class="data-field"><label>CS (Hex)</label><input type="text" id="in-cs" placeholder="32 9E AB F8 65 3D 57..."></div>
+                <div class="data-field"><label>PIN (DEC)</label><input type="number" id="in-pin"></div>
+                <div class="data-field"><label>MAC (Hex)</label><input type="text" id="in-mac"></div>
+                
+                <div class="data-row">
+                    <div class="data-field" style="flex: 3;"><label>Status (Hex)</label><input type="text" id="in-status"></div>
+                    <div class="data-field" style="flex: 1;"><label>Power (Hex)</label><input type="text" id="in-power"></div>
+                </div>
+
+                <div class="data-field"><label>Config (Hex)</label><input type="text" id="in-config"></div>
+                <div class="data-field"><label>Key 1 (Hex)</label><input type="text" id="in-key1"></div>
+                <div class="data-field"><label>Key 2 (Hex)</label><input type="text" id="in-key2"></div>
+                
+                <div class="data-field">
+                    <label>Type</label>
+                    <select id="in-type">
+                        <option value="01">01 - VW</option>
+                        <option value="02">02 - VW Special</option>
+                        <option value="03">03 - Audi</option>
+                        <option value="04">04 - Audi Special</option>
+                        <option value="05">05 - Seat</option>
+                        <option value="06">06 - Skoda</option>
+                    </select>
+                </div>
+
+                <button class="btn-success" onclick="saveChanges()">Сохранить и пересчитать</button>
+                <button class="btn-alt" onclick="cancelEdit()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
+
+        let fileBytes = new Uint8Array(160);
+        let hasFile = false;
+
+        const typeMap = {
+            0x01: "VW", 0x02: "VW Special", 0x03: "Audi",
+            0x04: "Audi Special", 0x05: "Seat", 0x06: "Skoda"
+        };
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.size !== 160) {
+                alert('Ошибка: Размер файла должен быть ровно 160 байт!');
+                this.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                fileBytes = new Uint8Array(ev.target.result);
+                hasFile = true;
+                document.getElementById('tab-data').disabled = false;
+                switchTab('data');
+                updateView();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.mode-block').forEach(b => b.classList.remove('active'));
+            
+            if (tab === 'upload') {
+                document.getElementById('tab-upload').classList.add('active');
+                document.getElementById('view-upload').classList.add('active');
+            } else {
+                if (!hasFile) return;
+                document.getElementById('tab-data').classList.add('active');
+                document.getElementById('view-data').classList.add('active');
+            }
+        }
+
+        // --- Вспомогательные функции ---
+        function getASCII(offset, len) {
+            return String.fromCharCode(...fileBytes.slice(offset, offset + len)).replace(/[^\x20-\x7E]/g, '');
+        }
+
+        function getHex(offset, len) {
+            return Array.from(fileBytes.slice(offset, offset + len))
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+
+        function swapHex(arr) {
+            return arr.slice().reverse().map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+
+        function hexToBytes(hexStr) {
+            return hexStr.trim().split(/\s+/).filter(Boolean).map(h => parseInt(h, 16));
+        }
+
+        function calculateBlockSum(start, len, skipTrailingFF = true) {
+            let sum = 0;
+            let end = start + len - 1;
+            if (skipTrailingFF) {
+                while (end >= start && fileBytes[end] === 0xFF) end--;
+            }
+            for (let i = start; i <= end; i++) sum = (sum + fileBytes[i]) & 0xFFFF;
+            return sum;
+        }
+
+        // --- Логика контрольных сумм ---
+        function verifyChecksums() {
+            const blocks = [
+                { name: "Блок 1 (VIN)", start: 0x1A, len: 17, chkOffset: 0x18 },
+                { name: "Блок 2", start: 0x32, len: 22, chkOffset: 0x30 },
+                { name: "Блок 3", start: 0x4A, len: 22, chkOffset: 0x48 },
+                { name: "Блок 4 (Id)", start: 0x62, len: 14, chkOffset: 0x60 },
+                { name: "Блок 5 (Keys)", start: 0x72, len: 22, chkOffset: 0x70 },
+                { name: "Блок 6 (End)", start: 0x8A, len: 16, chkOffset: 0x88, skipFF: false }
+            ];
+
+            let errors = [];
+
+            blocks.forEach(b => {
+                let calc = calculateBlockSum(b.start, b.len, b.skipFF !== false);
+                let actual = fileBytes[b.chkOffset] | (fileBytes[b.chkOffset + 1] << 8);
+                if (calc !== actual) errors.push(b.name);
+            });
+
+            const statusDiv = document.getElementById('chksum-status');
+            if (errors.length > 0) {
+                statusDiv.className = 'chksum-status chksum-err';
+                statusDiv.innerText = '❌ Ошибка chksum: ' + errors.join(', ');
+            } else {
+                statusDiv.className = 'chksum-status chksum-ok';
+                statusDiv.innerText = '✅ Все контрольные суммы верны';
+            }
+        }
+
+        function updateAllChecksums() {
+            const blocks = [
+                { start: 0x1A, len: 17, chkOffset: 0x18 },
+                { start: 0x32, len: 22, chkOffset: 0x30 },
+                { start: 0x4A, len: 22, chkOffset: 0x48 },
+                { start: 0x62, len: 14, chkOffset: 0x60 },
+                { start: 0x72, len: 22, chkOffset: 0x70 },
+                { start: 0x8A, len: 16, chkOffset: 0x88, skipFF: false }
+            ];
+
+            blocks.forEach(b => {
+                let sum = calculateBlockSum(b.start, b.len, b.skipFF !== false);
+                fileBytes[b.chkOffset] = sum & 0xFF;
+                fileBytes[b.chkOffset + 1] = (sum >> 8) & 0xFF;
+            });
+        }
+
+        // --- Обновление UI ---
+        function updateView() {
+            // Парсинг данных для отображения
+            document.getElementById('out-vin').innerText = getASCII(0x1A, 17);
+            document.getElementById('out-iddash').innerText = getASCII(0x62, 14);
+            
+            const csStr = getHex(0x36, 7) + ' ' + getHex(0x42, 1) + ' ' + getHex(0x44, 4);
+            document.getElementById('out-cs').innerText = csStr;
+
+            const pinDec = (fileBytes[0x33] << 8) | fileBytes[0x32];
+            document.getElementById('out-pin').innerText = pinDec.toString();
+
+            document.getElementById('out-mac').innerText = getHex(0x34, 2) + ' ' + getHex(0x4A, 2);
+            document.getElementById('out-status').innerText = getHex(0x3E, 4) + ' ' + getHex(0x43, 1);
+            document.getElementById('out-power').innerText = getHex(0x41, 1);
+            document.getElementById('out-config').innerText = getHex(0x56, 3) + ' ' + getHex(0x82, 1) + ' ' + getHex(0x5A, 2);
+            
+            document.getElementById('out-key1').innerText = swapHex(Array.from(fileBytes.slice(0x72, 0x76)));
+            document.getElementById('out-key2').innerText = swapHex(Array.from(fileBytes.slice(0x76, 0x7A)));
+            
+            const typeVal = fileBytes[0x5A];
+            document.getElementById('out-type').innerText = typeMap[typeVal] ? `${typeMap[typeVal]} (0x${typeVal.toString(16).padStart(2, '0').toUpperCase()})` : `Unknown (0x${typeVal.toString(16)})`;
+
+            verifyChecksums();
+        }
+
+        // --- Редактирование ---
+        function enableEditMode() {
+            // Заполняем инпуты текущими значениями
+            document.getElementById('in-vin').value = getASCII(0x1A, 17);
+            document.getElementById('in-iddash').value = getASCII(0x62, 14);
+            document.getElementById('in-cs').value = getHex(0x36, 7) + ' ' + getHex(0x42, 1) + ' ' + getHex(0x44, 4);
+            document.getElementById('in-pin').value = (fileBytes[0x33] << 8) | fileBytes[0x32];
+            document.getElementById('in-mac').value = getHex(0x34, 2) + ' ' + getHex(0x4A, 2);
+            document.getElementById('in-status').value = getHex(0x3E, 4) + ' ' + getHex(0x43, 1);
+            document.getElementById('in-power').value = getHex(0x41, 1);
+            document.getElementById('in-config').value = getHex(0x56, 3) + ' ' + getHex(0x82, 1) + ' ' + getHex(0x5A, 2);
+            document.getElementById('in-key1').value = swapHex(Array.from(fileBytes.slice(0x72, 0x76)));
+            document.getElementById('in-key2').value = swapHex(Array.from(fileBytes.slice(0x76, 0x7A)));
+            
+            const typeVal = fileBytes[0x5A].toString(16).padStart(2, '0');
+            document.getElementById('in-type').value = typeVal;
+
+            document.getElementById('read-mode').style.display = 'none';
+            document.getElementById('edit-mode').style.display = 'block';
+        }
+
+        function cancelEdit() {
+            document.getElementById('edit-mode').style.display = 'none';
+            document.getElementById('read-mode').style.display = 'block';
+        }
+
+        function saveChanges() {
+            try {
+                // VIN (17 байт)
+                let vin = document.getElementById('in-vin').value.padEnd(17, '\0').substring(0, 17);
+                for(let i=0; i<17; i++) fileBytes[0x1A + i] = vin.charCodeAt(i);
+
+                // Id Dash (14 байт)
+                let iddash = document.getElementById('in-iddash').value.padEnd(14, '\0').substring(0, 14);
+                for(let i=0; i<14; i++) fileBytes[0x62 + i] = iddash.charCodeAt(i);
+
+                // CS (7 + 1 + 4 байт)
+                let csBytes = hexToBytes(document.getElementById('in-cs').value);
+                if (csBytes.length !== 12) throw new Error("CS должен содержать 12 байт (7+1+4)");
+                for(let i=0; i<7; i++) fileBytes[0x36 + i] = csBytes[i];
+                fileBytes[0x42] = csBytes[7];
+                for(let i=0; i<4; i++) fileBytes[0x44 + i] = csBytes[8 + i];
+
+                // PIN (DEC -> Hex -> Swap)
+                let pinDec = parseInt(document.getElementById('in-pin').value);
+                if (isNaN(pinDec)) throw new Error("Неверный PIN");
+                fileBytes[0x32] = pinDec & 0xFF;
+                fileBytes[0x33] = (pinDec >> 8) & 0xFF;
+
+                // MAC (2 + 2 байт)
+                let macBytes = hexToBytes(document.getElementById('in-mac').value);
+                if (macBytes.length !== 4) throw new Error("MAC должен содержать 4 байта");
+                fileBytes[0x34] = macBytes[0]; fileBytes[0x35] = macBytes[1];
+                fileBytes[0x4A] = macBytes[2]; fileBytes[0x4B] = macBytes[3];
+
+                // Status (4 + 1 байт)
+                let statusBytes = hexToBytes(document.getElementById('in-status').value);
+                if (statusBytes.length !== 5) throw new Error("Status должен содержать 5 байт");
+                for(let i=0; i<4; i++) fileBytes[0x3E + i] = statusBytes[i];
+                fileBytes[0x43] = statusBytes[4];
+
+                // Power (1 байт)
+                let powerBytes = hexToBytes(document.getElementById('in-power').value);
+                if (powerBytes.length !== 1) throw new Error("Power должен содержать 1 байт");
+                fileBytes[0x41] = powerBytes[0];
+
+                // Config (3 + 1 + 2 байт)
+                let configBytes = hexToBytes(document.getElementById('in-config').value);
+                if (configBytes.length !== 6) throw new Error("Config должен содержать 6 байт");
+                for(let i=0; i<3; i++) fileBytes[0x56 + i] = configBytes[i];
+                fileBytes[0x82] = configBytes[3];
+                fileBytes[0x5A] = configBytes[4];
+                // байт 0x5B из Config
+                fileBytes[0x5B] = configBytes[5];
+
+                // Key 1 (Swap -> 4 байт)
+                let k1Bytes = hexToBytes(document.getElementById('in-key1').value).reverse();
+                if (k1Bytes.length !== 4) throw new Error("Key 1 должен содержать 4 байта");
+                for(let i=0; i<4; i++) fileBytes[0x72 + i] = k1Bytes[i];
+
+                // Key 2 (Swap -> 4 байт)
+                let k2Bytes = hexToBytes(document.getElementById('in-key2').value).reverse();
+                if (k2Bytes.length !== 4) throw new Error("Key 2 должен содержать 4 байта");
+                for(let i=0; i<4; i++) fileBytes[0x76 + i] = k2Bytes[i];
+
+                // Type (переопределяет 0x5A)
+                let typeVal = parseInt(document.getElementById('in-type').value, 16);
+                fileBytes[0x5A] = typeVal;
+
+                // Пересчет контрольных сумм
+                updateAllChecksums();
+
+                // Обновление вида
+                updateView();
+                cancelEdit();
+                
+                // Активация кнопки скачивания
+                document.getElementById('btn-download').style.display = 'block';
+                tg.HapticFeedback.notificationOccurred('success');
+
+            } catch (e) {
+                alert("Ошибка: " + e.message);
+                tg.HapticFeedback.notificationOccurred('error');
+            }
+        }
+
+        // --- Скачивание файла ---
+        function downloadDump() {
+            const blob = new Blob([fileBytes], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'immo_data_modified.bin';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
