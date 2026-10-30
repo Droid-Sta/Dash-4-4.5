@@ -87,10 +87,10 @@
 
         <!-- Вкладка загрузки -->
         <div id="view-upload" class="mode-block active">
-            <label for="fileInput">Загрузите дамп (ровно 160 байт)</label>
+            <label for="fileInput">Загрузите дамп (160 байт)</label>
             <input type="file" id="fileInput" accept=".bin,.BIN">
             <div style="font-size: 0.8rem; opacity: 0.6; margin-top: 10px; text-align: center;">
-                Поддерживается формат IMMO 4 / 4.5
+                Поддерживается формат IMMO 4 / 4.5 CS: 12 byte
             </div>
         </div>
 
@@ -138,7 +138,7 @@
                 <div class="data-field"><label>Key 1</label><input type="text" id="in-key1"></div>
                 <div class="data-field"><label>Key 2</label><input type="text" id="in-key2"></div>
 
-                <button class="btn-success" onclick="saveChanges()">Сохранить и пересчитать</button>
+                <button class="btn-success" onclick="saveChanges()">Пересчитать и сохранить</button>
                 <button class="btn-alt" onclick="cancelEdit()">Отмена</button>
             </div>
         </div>
