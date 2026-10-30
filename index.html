@@ -102,7 +102,7 @@
                     <div class="data-field"><label>VIN</label><div class="result-box" id="out-vin"></div></div>
                     <div class="data-field"><label>Id Dash</label><div class="result-box" id="out-iddash"></div></div>
                     <div class="data-field"><label>CS</label><div class="result-box" id="out-cs"></div></div>
-                    <div class="data-field"><label>PIN (DEC)</label><div class="result-box" id="out-pin"></div></div>
+                    <div class="data-field"><label>PIN</label><div class="result-box" id="out-pin"></div></div>
                     <div class="data-field"><label>MAC</label><div class="result-box" id="out-mac"></div></div>
                     
                     <div class="data-row">
@@ -113,6 +113,8 @@
                     <div class="data-field"><label>Config</label><div class="result-box" id="out-config"></div></div>
                     <div class="data-field"><label>Key 1</label><div class="result-box" id="out-key1"></div></div>
                     <div class="data-field"><label>Key 2</label><div class="result-box" id="out-key2"></div></div>
+                    
+                    <!-- Вернули окно Type в режим просмотра -->
                     <div class="data-field"><label>Type</label><div class="result-box" id="out-type"></div></div>
                 </div>
 
@@ -126,18 +128,15 @@
             <div id="edit-mode" style="display: none;">
                 <div class="data-field"><label>VIN</label><input type="text" id="in-vin" maxlength="17"></div>
                 <div class="data-field"><label>Id Dash</label><input type="text" id="in-iddash" maxlength="14"></div>
-                <div class="data-field"><label>CS (Hex, без пробелов)</label><input type="text" id="in-cs" placeholder="329EABF8653D5718249ACA30"></div>
-                <div class="data-field"><label>PIN (DEC)</label><input type="number" id="in-pin"></div>
-                <div class="data-field"><label>MAC (Hex, без пробелов)</label><input type="text" id="in-mac"></div>
+                <div class="data-field"><label>CS</label><input type="text" id="in-cs"></div>
+                <div class="data-field"><label>PIN</label><input type="number" id="in-pin"></div>
+                <div class="data-field"><label>MAC</label><input type="text" id="in-mac"></div>
                 
-                <div class="data-row">
-                    <div class="data-field" style="flex: 3;"><label>Status (Hex)</label><input type="text" id="in-status"></div>
-                    <div class="data-field" style="flex: 1;"><label>Power (Hex)</label><input type="text" id="in-power"></div>
-                </div>
+                <div class="data-field"><label>Status</label><input type="text" id="in-status"></div>
 
-                <div class="data-field"><label>Config (Hex)</label><input type="text" id="in-config"></div>
-                <div class="data-field"><label>Key 1 (Hex, свап)</label><input type="text" id="in-key1"></div>
-                <div class="data-field"><label>Key 2 (Hex, свап)</label><input type="text" id="in-key2"></div>
+                <div class="data-field"><label>Config</label><input type="text" id="in-config"></div>
+                <div class="data-field"><label>Key 1</label><input type="text" id="in-key1"></div>
+                <div class="data-field"><label>Key 2</label><input type="text" id="in-key2"></div>
 
                 <button class="btn-success" onclick="saveChanges()">Сохранить и пересчитать</button>
                 <button class="btn-alt" onclick="cancelEdit()">Отмена</button>
@@ -198,27 +197,18 @@
             return String.fromCharCode(...fileBytes.slice(offset, offset + len)).replace(/[^\x20-\x7E]/g, '');
         }
 
-        function getHex(offset, len) {
-            return Array.from(fileBytes.slice(offset, offset + len))
-                .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-        }
-        
+        // Вывод данных БЕЗ ПРОБЕЛОВ
         function getHexNoSpaces(offset, len) {
             return Array.from(fileBytes.slice(offset, offset + len))
                 .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
         }
 
-        function swapHex(offset, len) {
-            return Array.from(fileBytes.slice(offset, offset + len)).reverse()
-                .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-        }
-        
         function swapHexNoSpaces(offset, len) {
             return Array.from(fileBytes.slice(offset, offset + len)).reverse()
                 .map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
         }
 
-        // Парсер строки без пробелов
+        // Парсер строки (игнорирует пробелы, если они есть)
         function parseHexStr(str) {
             let clean = str.replace(/[^0-9A-Fa-f]/g, '');
             let bytes = [];
@@ -289,19 +279,18 @@
             document.getElementById('out-vin').innerText = getASCII(0x1A, 17);
             document.getElementById('out-iddash').innerText = getASCII(0x62, 14);
             
-            const csStr = getHex(0x36, 7) + ' ' + getHex(0x42, 1) + ' ' + getHex(0x44, 4);
-            document.getElementById('out-cs').innerText = csStr;
+            document.getElementById('out-cs').innerText = getHexNoSpaces(0x36, 7) + getHexNoSpaces(0x42, 1) + getHexNoSpaces(0x44, 4);
 
             const pinDec = (fileBytes[0x33] << 8) | fileBytes[0x32];
             document.getElementById('out-pin').innerText = pinDec.toString();
 
-            document.getElementById('out-mac').innerText = getHex(0x34, 2) + ' ' + getHex(0x4A, 2);
-            document.getElementById('out-status').innerText = getHex(0x3E, 4) + ' ' + getHex(0x43, 1);
-            document.getElementById('out-power').innerText = getHex(0x41, 1);
-            document.getElementById('out-config').innerText = getHex(0x56, 3) + ' ' + getHex(0x82, 1) + ' ' + getHex(0x5A, 2);
+            document.getElementById('out-mac').innerText = getHexNoSpaces(0x34, 2) + getHexNoSpaces(0x4A, 2);
+            document.getElementById('out-status').innerText = getHexNoSpaces(0x3E, 4) + getHexNoSpaces(0x43, 1);
+            document.getElementById('out-power').innerText = getHexNoSpaces(0x41, 1);
+            document.getElementById('out-config').innerText = getHexNoSpaces(0x56, 3) + getHexNoSpaces(0x82, 1) + getHexNoSpaces(0x5A, 2);
             
-            document.getElementById('out-key1').innerText = swapHex(0x72, 4);
-            document.getElementById('out-key2').innerText = swapHex(0x76, 4);
+            document.getElementById('out-key1').innerText = swapHexNoSpaces(0x72, 4);
+            document.getElementById('out-key2').innerText = swapHexNoSpaces(0x76, 4);
             
             const typeVal = fileBytes[0x5A];
             document.getElementById('out-type').innerText = typeMap[typeVal] ? `${typeMap[typeVal]} (0x${typeVal.toString(16).padStart(2, '0').toUpperCase()})` : `Unknown (0x${typeVal.toString(16)})`;
@@ -319,10 +308,8 @@
             document.getElementById('in-pin').value = (fileBytes[0x33] << 8) | fileBytes[0x32];
             document.getElementById('in-mac').value = getHexNoSpaces(0x34, 2) + getHexNoSpaces(0x4A, 2);
             document.getElementById('in-status').value = getHexNoSpaces(0x3E, 4) + getHexNoSpaces(0x43, 1);
-            document.getElementById('in-power').value = getHexNoSpaces(0x41, 1);
             document.getElementById('in-config').value = getHexNoSpaces(0x56, 3) + getHexNoSpaces(0x82, 1) + getHexNoSpaces(0x5A, 2);
             
-            // Свапнутые ключи без пробелов
             document.getElementById('in-key1').value = swapHexNoSpaces(0x72, 4);
             document.getElementById('in-key2').value = swapHexNoSpaces(0x76, 4);
 
@@ -370,12 +357,7 @@
                 for(let i=0; i<4; i++) fileBytes[0x3E + i] = statusBytes[i];
                 fileBytes[0x43] = statusBytes[4];
 
-                // Power (1 байт)
-                let powerBytes = parseHexStr(document.getElementById('in-power').value);
-                if (powerBytes.length !== 1) throw new Error("Power должен содержать 1 байт (2 символа)");
-                fileBytes[0x41] = powerBytes[0];
-
-                // Config (3 + 1 + 2 = 6 байт)
+                // Config (3 + 1 + 2 = 6 байт) - включает в себя Type (0x5A)
                 let configBytes = parseHexStr(document.getElementById('in-config').value);
                 if (configBytes.length !== 6) throw new Error("Config должен содержать 6 байт (12 символов)");
                 for(let i=0; i<3; i++) fileBytes[0x56 + i] = configBytes[i];
